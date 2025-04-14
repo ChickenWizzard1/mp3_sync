@@ -2,40 +2,37 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Login - MP3 Sync</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body class="auth-page">
-  <div class="auth-container">
+  <main class="auth-container">
     <div class="logo">
       <i class="fas fa-music"></i>
       <h1>MP3 Sync</h1>
     </div>
-
-    <form id="loginForm">
+    <form id="loginForm" aria-label="Login-Formular">
       <div class="form-group">
         <label for="username" class="form-label">Benutzername</label>
-        <input type="text" id="username" name="username" class="form-input" required>
+        <input type="text" id="username" name="username" class="form-input" required aria-required="true">
       </div>
-
       <div class="form-group">
         <label for="password" class="form-label">Passwort</label>
-        <input type="password" id="password" name="password" class="form-input" required>
+        <input type="password" id="password" name="password" class="form-input" required aria-required="true">
       </div>
-
-      <button type="submit" class="btn">
+      <button type="submit" class="btn btn-primary" aria-label="Einloggen">
         <i class="fas fa-sign-in-alt"></i> Login
       </button>
-
       <div class="form-footer">
         <p>Noch kein Konto? <a href="/register.html" class="link">Registrieren</a></p>
       </div>
     </form>
-  </div>
-
+  </main>
   <script src="/js/auth.js"></script>
 </body>
 </html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registrieren - MP3 Sync</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="auth-page">
+  <div class="auth-container">
+    <div class="logo">
+      <i class="fas fa-music"></i>
+      <h1>MP3 Sync</h1>
+    </div>
+
+    <form id="registerForm">
+      <div class="form-group">
+        <label for="username" class="form-label">Benutzername</label>
+        <input type="text" id="username" name="username" class="form-input" required>
+        <small class="form-hint">3-20 Zeichen, nur Buchstaben, Zahlen und Unterstriche</small>
+      </div>
+
+      <div class="form-group">
+        <label for="password" class="form-label">Passwort</label>
+        <input type="password" id="password" name="password" class="form-input" required>
+        <small class="form-hint">Mindestens 6 Zeichen</small>
+      </div>
+
+      <button type="submit" class="btn">
+        <i class="fas fa-user-plus"></i> Registrieren
+      </button>
+
+      <div class="form-footer">
+        <p>Bereits ein Konto? <a href="/login.html" class="link">Login</a></p>
+      </div>
+    </form>
+  </div>
+
+  <script src="/js/auth.js"></script>
+</body>
+</html>

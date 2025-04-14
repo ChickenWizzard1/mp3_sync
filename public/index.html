@@ -2,25 +2,26 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>MP3 Sync</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="container">
-    <div class="sidebar">
+    <aside class="sidebar">
       <div class="profile">
-        <img id="profileImage" src="" alt="Profile" class="profile-img">
-        <div>
+        <img id="profileImage" src="" alt="Profilbild" class="profile-img" aria-label="Profilbild ändern">
+        <div class="profile-info">
           <div id="username" class="profile-name"></div>
           <small id="userStatus" class="user-status">Online</small>
         </div>
       </div>
-
-      <nav class="sidebar-nav">
-        <a href="#" class="nav-item active" id="homeLink">
+      <nav class="sidebar-nav" aria-label="Hauptnavigation">
+        <a href="#" class="nav-item active" id="homeLink" aria-current="page">
           <i class="fas fa-home"></i>
           <span>Startseite</span>
         </a>
@@ -37,49 +38,46 @@
           <span>Logout</span>
         </a>
       </nav>
-    </div>
+    </aside>
 
-    <div class="main-content">
-      <div class="header">
+    <main class="main-content">
+      <header class="header">
         <h1 class="page-title" id="pageTitle">Willkommen zurück</h1>
-        <button class="btn" id="uploadBtn">
+        <button class="btn btn-primary" id="uploadBtn" aria-label="Musik hochladen">
           <i class="fas fa-upload"></i> Musik hochladen
         </button>
-      </div>
+      </header>
 
-      <div class="content-section" id="homeSection">
+      <section class="content-section" id="homeSection">
         <div class="room-controls">
           <div class="form-group">
-            <input type="text" id="roomCodeInput" class="form-input" placeholder="Raumcode eingeben">
-            <button class="btn" id="joinRoomBtn">Raum beitreten</button>
+            <input type="text" id="roomCodeInput" class="form-input" placeholder="Raumcode eingeben" aria-label="Raumcode">
+            <button class="btn btn-primary" id="joinRoomBtn">Raum beitreten</button>
           </div>
           <button class="btn btn-danger" id="leaveRoomBtn">Raum verlassen</button>
         </div>
-
         <div class="room-info hidden" id="roomInfo">
           <h3>Aktiver Raum</h3>
           <p id="roomName"></p>
           <div class="room-members" id="roomMembers"></div>
         </div>
+        <div class="audio-list" id="audioList" role="list"></div>
+      </section>
 
-        <div class="audio-list" id="audioList"></div>
-      </div>
-
-      <div class="content-section hidden" id="friendsSection">
+      <section class="content-section hidden" id="friendsSection">
         <h2>Freunde</h2>
-        <div class="friends-list" id="friendsList"></div>
-
+        <div class="friends-list" id="friendsList" role="list"></div>
         <h2 style="margin-top: 30px;">Freundschaftsanfragen</h2>
-        <div class="friends-list" id="friendRequestsList"></div>
-      </div>
+        <div class="friends-list" id="friendRequestsList" role="list"></div>
+      </section>
 
-      <div class="content-section hidden" id="musicSection">
+      <section class="content-section hidden" id="musicSection">
         <h2>Meine Musik</h2>
-        <div class="audio-list" id="myMusicList"></div>
-      </div>
-    </div>
+        <div class="audio-list" id="myMusicList" role="list"></div>
+      </section>
+    </main>
 
-    <div class="player">
+    <footer class="player" aria-label="Musik-Player">
       <div class="player-info">
         <div class="player-img" id="currentTrackImage">
           <i class="fas fa-music"></i>
@@ -89,97 +87,91 @@
           <div class="player-artist" id="currentTrackArtist">MP3 Sync</div>
         </div>
       </div>
-
       <div class="player-controls">
         <div class="player-buttons">
-          <button class="player-btn" id="volumeBtn">
+          <button class="player-btn" id="volumeBtn" aria-label="Lautstärke ein/aus">
             <i class="fas fa-volume-mute"></i>
           </button>
-          <button class="player-btn" id="rewindBtn">
+          <button class="player-btn" id="rewindBtn" aria-label="10 Sekunden zurück">
             <i class="fas fa-backward"></i>
           </button>
-          <button class="player-btn" id="prevBtn">
+          <button class="player-btn" id="prevBtn" aria-label="Vorheriger Titel">
             <i class="fas fa-step-backward"></i>
           </button>
-          <button class="player-btn play" id="playBtn">
+          <button class="player-btn play" id="playBtn" aria-label="Abspielen/Pausieren">
             <i class="fas fa-play"></i>
           </button>
-          <button class="player-btn" id="nextBtn">
+          <button class="player-btn" id="nextBtn" aria-label="Nächster Titel">
             <i class="fas fa-step-forward"></i>
           </button>
-          <button class="player-btn" id="forwardBtn">
+          <button class="player-btn" id="forwardBtn" aria-label="10 Sekunden vor">
             <i class="fas fa-forward"></i>
           </button>
         </div>
-
-        <div class="progress-container" id="progressContainer">
+        <div class="progress-container" id="progressContainer" role="slider" aria-label="Fortschrittsleiste" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
           <div class="progress" id="progress"></div>
         </div>
-
         <div class="time">
-          <span id="currentTime">0:00</span>
-          <span id="duration">0:00</span>
+          <span id="currentTime" aria-label="Aktuelle Zeit">0:00</span>
+          <span id="duration" aria-label="Gesamtdauer">0:00</span>
         </div>
-
-        <div class="chapter-list hidden" id="chapterList"></div>
+        <div class="chapter-list hidden" id="chapterList" role="list"></div>
       </div>
-
       <div class="player-actions">
-        <button class="btn btn-outline" id="inviteBtn">
+        <button class="btn btn-outline" id="inviteBtn" aria-label="Freunde einladen">
           <i class="fas fa-user-plus"></i> Freunde einladen
         </button>
       </div>
-    </div>
+    </footer>
   </div>
 
-  <div class="modal" id="uploadModal">
+  <div class="modal" id="uploadModal" role="dialog" aria-labelledby="uploadModalTitle">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 class="modal-title">Musik hochladen</h3>
-        <button class="close-modal">×</button>
+        <h3 class="modal-title" id="uploadModalTitle">Musik hochladen</h3>
+        <button class="close-modal" aria-label="Modal schließen">×</button>
       </div>
       <form id="uploadForm">
         <div class="form-group">
-          <label class="form-label">MP3- oder M4B-Datei auswählen</label>
-          <input type="file" name="file" accept=".mp3,.m4b" class="form-input" required>
+          <label class="form-label" for="fileUpload">MP3- oder M4B-Datei auswählen</label>
+          <input type="file" id="fileUpload" name="file" accept=".mp3,.m4b" class="form-input" required>
         </div>
-        <button type="submit" class="btn">
+        <button type="submit" class="btn btn-primary">
           <i class="fas fa-upload"></i> Hochladen
         </button>
       </form>
     </div>
   </div>
 
-  <div class="modal" id="inviteModal">
+  <div class="modal" id="inviteModal" role="dialog" aria-labelledby="inviteModalTitle">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 class="modal-title">Freunde einladen</h3>
-        <button class="close-modal">×</button>
+        <h3 class="modal-title" id="inviteModalTitle">Freunde einladen</h3>
+        <button class="close-modal" aria-label="Modal schließen">×</button>
       </div>
-      <div class="friends-list" id="inviteFriendsList"></div>
+      <div class="friends-list" id="inviteFriendsList" role="list"></div>
     </div>
   </div>
 
-  <div class="modal" id="profileImageModal">
+  <div class="modal" id="profileImageModal" role="dialog" aria-labelledby="profileImageModalTitle">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 class="modal-title">Profilbild ändern</h3>
-        <button class="close-modal">×</button>
+        <h3 class="modal-title" id="profileImageModalTitle">Profilbild ändern</h3>
+        <button class="close-modal" aria-label="Modal schließen">×</button>
       </div>
       <form id="profileImageForm">
         <div class="form-group">
-          <label class="form-label">Bild auswählen</label>
-          <input type="file" name="profileImage" accept="image/*" class="form-input" required>
+          <label class="form-label" for="profileImageUpload">Bild auswählen</label>
+          <input type="file" id="profileImageUpload" name="profileImage" accept="image/*" class="form-input" required>
         </div>
-        <button type="submit" class="btn">
+        <button type="submit" class="btn btn-primary">
           <i class="fas fa-save"></i> Speichern
         </button>
       </form>
     </div>
   </div>
 
-  <audio id="audioPlayer" preload="auto" muted></audio>
-
+  <audio id="audioPlayer" preload="auto"></audio>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/main.js"></script>
 </body>
