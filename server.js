@@ -62,10 +62,16 @@ async function downloadFileToTemp(fileName, userId) {
   try {
     // Construct the B2 file path with userId prefix
     const baseName = path.basename(fileName);
-    const isCover = fileName.startsWith('covers/');
-    const b2FileName = isCover 
-      ? `covers/${userId}_${baseName}` 
-      : `audio_files/${userId}_${baseName}`;
+    let b2FileName;
+    if (fileName.startsWith('covers/')) {
+      b2FileName = `covers/${userId}_${baseName}`;
+    } else if (fileName.startsWith('audio_files/')) {
+      b2FileName = `audio_files/${userId}_${baseName}`;
+    } else if (fileName.startsWith('profile_images/')) {
+      b2FileName = `profile_images/${userId}_${baseName}`;
+    } else {
+      b2FileName = `${userId}_${baseName}`; // Fallback for profile images stored directly
+    }
     
     const localPath = path.join('temp_uploads', baseName);
 
@@ -103,7 +109,7 @@ async function downloadFileToTemp(fileName, userId) {
   }
 }
 
-// On server start, download all audio files and covers from B2 to temp_uploads
+// On server start, download all audio files, covers, and profile images from B2 to temp_uploads
 async function downloadExistingFiles() {
   if (!b2Authorized) {
     console.log("Waiting for B2 authorization before downloading files...");
@@ -165,6 +171,21 @@ async function downloadExistingFiles() {
           }
         }
       }
+
+      // Download profile image if it exists
+      if (user.profileImage) {
+        const profileImageFileName = path.basename(user.profileImage);
+        const localProfileImagePath = path.join('temp_uploads', profileImageFileName);
+
+        if (!fs.existsSync(localProfileImagePath)) {
+          try {
+            await downloadFileToTemp(`profile_images/${profileImageFileName}`, userId);
+            console.log(`Downloaded profile image: ${profileImageFileName} for user ${userId}`);
+          } catch (err) {
+            console.error(`Error downloading profile image ${profileImageFileName} for user ${userId}:`, err.message);
+          }
+        }
+      }
     }
   } catch (err) {
     console.error('Error downloading existing files:', err.message);
@@ -176,7 +197,7 @@ if (!fs.existsSync('temp_uploads')) {
   fs.mkdirSync('temp_uploads');
 }
 
-// Serve temp_uploads statically for covers and audio
+// Serve temp_uploads statically for covers, audio, and profile images
 app.use('/temp_uploads', express.static('temp_uploads'));
 
 // Start B2 authorization and file download
