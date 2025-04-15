@@ -1,4 +1,5 @@
 require('dotenv').config();
+
 const express = require('express');
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
@@ -10,6 +11,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const fs = require('fs');
 const mm = require('music-metadata');
+const B2 = require('backblaze-b2');
 
 const User = require('./models/User');
 
@@ -23,21 +25,222 @@ const io = new Server(server, {
   }
 });
 
+// Initialize Backblaze B2
+const b2 = new B2({
+  applicationKeyId: process.env.B2_KEY_ID,
+  applicationKey: process.env.B2_APPLICATION_KEY
+});
+
+// Authenticate with Backblaze B2 with retry logic
+let b2Authorized = false;
+async function authorizeB2(retries = 3, delay = 1000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await b2.authorize();
+      b2Authorized = true;
+      console.log("Backblaze B2 authorized successfully");
+      return true;
+    } catch (err) {
+      console.error(`Backblaze B2 authorization attempt ${attempt} failed:`, err.message);
+      if (attempt < retries) {
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        console.error("Max retries reached. Backblaze B2 authorization failed.");
+        return false;
+      }
+    }
+  }
+}
+
+// Download file from B2 to temp_uploads
+async function downloadFileToTemp(fileName) {
+  if (!b2Authorized) {
+    throw new Error("B2 not authorized. Please check credentials and network.");
+  }
+
+  try {
+    const localPath = path.join('temp_uploads', path.basename(fileName));
+
+    // Check if file already exists locally
+    if (fs.existsSync(localPath)) {
+      console.log(`File ${fileName} already exists locally at ${localPath}`);
+      return localPath;
+    }
+
+    // Download file from B2
+    const response = await b2.downloadFileByName({
+      bucketName: process.env.B2_BUCKET_NAME,
+      fileName: fileName,
+      responseType: 'stream'
+    });
+
+    const writer = fs.createWriteStream(localPath);
+
+    response.data.pipe(writer);
+
+    return new Promise((resolve, reject) => {
+      writer.on('finish', () => {
+        console.log(`Downloaded file ${fileName} to ${localPath}`);
+        resolve(localPath);
+      });
+      writer.on('error', (err) => {
+        console.error(`Error writing file ${fileName}:`, err);
+        reject(err);
+      });
+    });
+  } catch (err) {
+    console.error(`Error downloading file ${fileName} from B2:`, err.message);
+    throw err;
+  }
+}
+
+// On server start, download all audio files and covers from B2 to temp_uploads
+async function downloadExistingFiles() {
+  if (!b2Authorized) {
+    console.log("Waiting for B2 authorization before downloading files...");
+    const authorized = await authorizeB2();
+    if (!authorized) {
+      console.error("Cannot download files: B2 authorization failed.");
+      return;
+    }
+  }
+
+  try {
+    const users = await User.find({});
+    for (const user of users) {
+      // Download audio files
+      for (const audioFile of user.audioFiles) {
+        const fileName = path.basename(audioFile.path);
+        const localPath = path.join('temp_uploads', fileName);
+
+        if (!fs.existsSync(localPath)) {
+          try {
+            await downloadFileToTemp(`audio_files/${fileName}`);
+            console.log(`Downloaded audio file: ${fileName}`);
+          } catch (err) {
+            console.error(`Error downloading audio file ${fileName}:`, err.message);
+          }
+        }
+      }
+
+      // Download albums
+      for (const album of user.albums) {
+        const fileName = path.basename(album.path);
+        const localPath = path.join('temp_uploads', fileName);
+
+        if (!fs.existsSync(localPath)) {
+          try {
+            await downloadFileToTemp(`audio_files/${fileName}`);
+            console.log(`Downloaded album: ${fileName}`);
+          } catch (err) {
+            console.error(`Error downloading album ${fileName}:`, err.message);
+          }
+        }
+      }
+
+      // Download covers if they exist
+      for (const item of [...user.audioFiles, ...user.albums]) {
+        if (item.cover) {
+          const coverFileName = path.basename(item.cover);
+          const localCoverPath = path.join('temp_uploads', coverFileName);
+
+          if (!fs.existsSync(localCoverPath)) {
+            try {
+              await downloadFileToTemp(`covers/${coverFileName}`);
+              console.log(`Downloaded cover: ${coverFileName}`);
+            } catch (err) {
+              console.error(`Error downloading cover ${coverFileName}:`, err.message);
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error downloading existing files:', err.message);
+  }
+}
+
+// Create temp_uploads directory if it doesn't exist
+if (!fs.existsSync('temp_uploads')) {
+  fs.mkdirSync('temp_uploads');
+}
+
+// Serve temp_uploads statically for covers and audio
+app.use('/temp_uploads', express.static('temp_uploads'));
+
+// Start B2 authorization and file download
+(async () => {
+  await authorizeB2();
+  if (b2Authorized) {
+    downloadExistingFiles();
+  } else {
+    console.error("Server started without B2 authorization. File downloads disabled.");
+  }
+})();
+
+// Helper function to upload file to B2
+async function uploadToB2(file, fileName) {
+  if (!b2Authorized) throw new Error("B2 not authorized");
+
+  // Get upload URL
+  const { data: { uploadUrl, authorizationToken } } = await b2.getUploadUrl({
+    bucketId: process.env.B2_BUCKET_ID
+  });
+
+  // Read file data
+  const fileData = fs.readFileSync(file.path);
+
+  // Upload file
+  const response = await b2.uploadFile({
+    uploadUrl,
+    uploadAuthToken: authorizationToken,
+    fileName: fileName,
+    data: fileData,
+    mime: file.mimetype
+  });
+
+  return response.data;
+}
+
+// Helper function to delete file from B2
+async function deleteFromB2(fileName) {
+  if (!b2Authorized) throw new Error("B2 not authorized");
+
+  try {
+    // First get file info
+    const { data: { files } } = await b2.listFileNames({
+      bucketId: process.env.B2_BUCKET_ID,
+      startFileName: fileName,
+      maxFileCount: 1
+    });
+
+    if (files.length > 0 && files[0].fileName === fileName) {
+      await b2.deleteFileVersion({
+        fileId: files[0].fileId,
+        fileName: fileName
+      });
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error("Error deleting file from B2:", err);
+    return false;
+  }
+}
+
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
 
 mongoose.connect(process.env.MONGO_URL)
   .then(() => console.log("MongoDB verbunden"))
   .catch(err => console.error("MongoDB Fehler", err));
 
-if (!fs.existsSync('uploads')) {
-  fs.mkdirSync('uploads');
-}
-
 const storage = multer.diskStorage({
-  destination: 'uploads/',
+  destination: (req, file, cb) => {
+    cb(null, 'temp_uploads/');
+  },
   filename: (req, file, cb) => {
     cb(null, Date.now() + path.extname(file.originalname));
   }
@@ -186,7 +389,18 @@ app.post('/api/upload-profile', auth, imageUpload.single('profileImage'), async 
   try {
     if (!req.file) return res.status(400).json({ error: "Kein Bild hochgeladen" });
 
-    const imagePath = `/uploads/${req.file.filename}`;
+    const imagePath = `/temp_uploads/${req.file.filename}`;
+
+    // Upload to B2 for backup
+    try {
+      const b2FileName = `profile_images/${req.user.id}_${req.file.filename}`;
+      await uploadToB2(req.file, b2FileName);
+      console.log(`Uploaded profile image ${b2FileName} to B2`);
+    } catch (err) {
+      console.error('Failed to upload profile image to B2:', err.message);
+      // Continue even if B2 upload fails, as local storage is primary
+    }
+
     await User.findByIdAndUpdate(req.user.id, { profileImage: imagePath });
 
     res.json({
@@ -194,6 +408,7 @@ app.post('/api/upload-profile', auth, imageUpload.single('profileImage'), async 
       profileImage: imagePath
     });
   } catch (err) {
+    console.error('Fehler beim Hochladen des Profilbilds:', err);
     res.status(500).json({ error: "Serverfehler beim Hochladen des Profilbilds" });
   }
 });
@@ -202,13 +417,23 @@ app.post('/api/upload-audio', auth, audioUpload.single('file'), async (req, res)
   try {
     if (!req.file) return res.status(400).json({ error: "Keine Datei hochgeladen" });
 
-    const filePath = `/uploads/${req.file.filename}`;
-    const user = await User.findById(req.user.id);
+    const filePath = `/temp_uploads/${req.file.filename}`;
+    const localFilePath = path.join(__dirname, 'temp_uploads', req.file.filename);
+
+    // Upload main file to B2
+    const b2FileName = `audio_files/${req.user.id}_${req.file.filename}`;
+    try {
+      await uploadToB2(req.file, b2FileName);
+      console.log(`Uploaded audio file ${b2FileName} to B2`);
+    } catch (err) {
+      console.error('Failed to upload audio file to B2:', err.message);
+      // Continue with local storage
+    }
 
     // Metadaten aus der Datei auslesen
     let metadata;
     try {
-      metadata = await mm.parseFile(path.join(__dirname, filePath));
+      metadata = await mm.parseFile(localFilePath);
     } catch (err) {
       console.error('Fehler beim Auslesen der Metadaten:', err);
     }
@@ -216,8 +441,23 @@ app.post('/api/upload-audio', auth, audioUpload.single('file'), async (req, res)
     let coverPath = null;
     if (metadata?.common?.picture?.[0]?.data) {
       const coverExt = metadata.common.picture[0].format.split('/')[1] || 'jpg';
-      coverPath = `/uploads/cover_${req.file.filename}.${coverExt}`;
-      fs.writeFileSync(path.join(__dirname, coverPath), metadata.common.picture[0].data);
+      const coverFileName = `cover_${req.file.filename}.${coverExt}`;
+      coverPath = `/temp_uploads/${coverFileName}`;
+      const localCoverPath = path.join(__dirname, 'temp_uploads', coverFileName);
+      fs.writeFileSync(localCoverPath, metadata.common.picture[0].data);
+
+      // Upload cover to B2 for backup
+      try {
+        const b2CoverFileName = `covers/${req.user.id}_${coverFileName}`;
+        await uploadToB2(
+          { path: localCoverPath, originalname: coverFileName, mimetype: metadata.common.picture[0].format },
+          b2CoverFileName
+        );
+        console.log(`Uploaded cover ${b2CoverFileName} to B2`);
+      } catch (err) {
+        console.error('Failed to upload cover to B2:', err.message);
+        // Continue with local storage
+      }
     }
 
     const isM4B = req.file.mimetype === 'audio/mp4';
@@ -239,8 +479,7 @@ app.post('/api/upload-audio', auth, audioUpload.single('file'), async (req, res)
         }))
       };
 
-      user.albums.push(album);
-      await user.save();
+      await User.findByIdAndUpdate(req.user.id, { $push: { albums: album } });
 
       res.json({
         message: "Album erfolgreich hochgeladen",
@@ -258,8 +497,7 @@ app.post('/api/upload-audio', auth, audioUpload.single('file'), async (req, res)
         duration: req.body.duration || 0
       };
 
-      user.audioFiles.push(audioFile);
-      await user.save();
+      await User.findByIdAndUpdate(req.user.id, { $push: { audioFiles: audioFile } });
 
       res.json({
         message: "Audio erfolgreich hochgeladen",
@@ -289,26 +527,46 @@ app.delete('/api/delete-audio/:id', auth, async (req, res) => {
       return res.status(404).json({ error: "Datei oder Album nicht gefunden" });
     }
 
-    // Datei und Cover aus dem Dateisystem löschen
-    const filePath = path.join(__dirname, item.path);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // Delete from B2
+    const fileName = path.basename(item.path);
+    try {
+      await deleteFromB2(`audio_files/${fileName}`);
+      console.log(`Deleted audio file audio_files/${fileName} from B2`);
+    } catch (err) {
+      console.error(`Failed to delete audio file audio_files/${fileName} from B2:`, err.message);
     }
 
     if (item.cover) {
-      const coverPath = path.join(__dirname, item.cover);
-      if (fs.existsSync(coverPath)) {
-        fs.unlinkSync(coverPath);
+      const coverFileName = path.basename(item.cover);
+      try {
+        await deleteFromB2(`covers/${coverFileName}`);
+        console.log(`Deleted cover covers/${coverFileName} from B2`);
+      } catch (err) {
+        console.error(`Failed to delete cover covers/${coverFileName} from B2:`, err.message);
       }
     }
 
-    // Aus Datenbank entfernen
-    if (isAlbum) {
-      user.albums = user.albums.filter(album => album._id.toString() !== id);
-    } else {
-      user.audioFiles = user.audioFiles.filter(file => file._id.toString() !== id);
+    // Delete local files
+    const localFilePath = path.join(__dirname, 'temp_uploads', fileName);
+    if (fs.existsSync(localFilePath)) {
+      fs.unlinkSync(localFilePath);
+      console.log(`Deleted local audio file ${localFilePath}`);
     }
-    await user.save();
+
+    if (item.cover) {
+      const localCoverPath = path.join(__dirname, 'temp_uploads', path.basename(item.cover));
+      if (fs.existsSync(localCoverPath)) {
+        fs.unlinkSync(localCoverPath);
+        console.log(`Deleted local cover ${localCoverPath}`);
+      }
+    }
+
+    // Remove from database
+    if (isAlbum) {
+      await User.findByIdAndUpdate(req.user.id, { $pull: { albums: { _id: id } } });
+    } else {
+      await User.findByIdAndUpdate(req.user.id, { $pull: { audioFiles: { _id: id } } });
+    }
 
     res.json({ message: isAlbum ? "Album erfolgreich gelöscht" : "Audio-Datei erfolgreich gelöscht" });
   } catch (err) {
@@ -318,7 +576,7 @@ app.delete('/api/delete-audio/:id', auth, async (req, res) => {
 });
 
 app.get('/api/stream-audio/:filename', auth, (req, res) => {
-  const filePath = path.join(__dirname, 'uploads', req.params.filename);
+  const filePath = path.join(__dirname, 'temp_uploads', req.params.filename);
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ error: "Datei nicht gefunden" });
