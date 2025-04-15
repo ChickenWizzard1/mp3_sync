@@ -54,24 +54,32 @@ async function authorizeB2(retries = 3, delay = 1000) {
 }
 
 // Download file from B2 to temp_uploads
-async function downloadFileToTemp(fileName) {
+async function downloadFileToTemp(fileName, userId) {
   if (!b2Authorized) {
     throw new Error("B2 not authorized. Please check credentials and network.");
   }
 
   try {
-    const localPath = path.join('temp_uploads', path.basename(fileName));
+    // Construct the B2 file path with userId prefix
+    const baseName = path.basename(fileName);
+    const isCover = fileName.startsWith('covers/');
+    const b2FileName = isCover 
+      ? `covers/${userId}_${baseName}` 
+      : `audio_files/${userId}_${baseName}`;
+    
+    const localPath = path.join('temp_uploads', baseName);
 
     // Check if file already exists locally
     if (fs.existsSync(localPath)) {
-      console.log(`File ${fileName} already exists locally at ${localPath}`);
+      console.log(`File ${b2FileName} already exists locally at ${localPath}`);
       return localPath;
     }
 
     // Download file from B2
+    console.log(`Attempting to download ${b2FileName} from B2...`);
     const response = await b2.downloadFileByName({
       bucketName: process.env.B2_BUCKET_NAME,
-      fileName: fileName,
+      fileName: b2FileName,
       responseType: 'stream'
     });
 
@@ -81,11 +89,11 @@ async function downloadFileToTemp(fileName) {
 
     return new Promise((resolve, reject) => {
       writer.on('finish', () => {
-        console.log(`Downloaded file ${fileName} to ${localPath}`);
+        console.log(`Downloaded file ${b2FileName} to ${localPath}`);
         resolve(localPath);
       });
       writer.on('error', (err) => {
-        console.error(`Error writing file ${fileName}:`, err);
+        console.error(`Error writing file ${b2FileName}:`, err);
         reject(err);
       });
     });
@@ -109,6 +117,8 @@ async function downloadExistingFiles() {
   try {
     const users = await User.find({});
     for (const user of users) {
+      const userId = user._id.toString();
+      
       // Download audio files
       for (const audioFile of user.audioFiles) {
         const fileName = path.basename(audioFile.path);
@@ -116,10 +126,10 @@ async function downloadExistingFiles() {
 
         if (!fs.existsSync(localPath)) {
           try {
-            await downloadFileToTemp(`audio_files/${fileName}`);
-            console.log(`Downloaded audio file: ${fileName}`);
+            await downloadFileToTemp(`audio_files/${fileName}`, userId);
+            console.log(`Downloaded audio file: ${fileName} for user ${userId}`);
           } catch (err) {
-            console.error(`Error downloading audio file ${fileName}:`, err.message);
+            console.error(`Error downloading audio file ${fileName} for user ${userId}:`, err.message);
           }
         }
       }
@@ -131,10 +141,10 @@ async function downloadExistingFiles() {
 
         if (!fs.existsSync(localPath)) {
           try {
-            await downloadFileToTemp(`audio_files/${fileName}`);
-            console.log(`Downloaded album: ${fileName}`);
+            await downloadFileToTemp(`audio_files/${fileName}`, userId);
+            console.log(`Downloaded album: ${fileName} for user ${userId}`);
           } catch (err) {
-            console.error(`Error downloading album ${fileName}:`, err.message);
+            console.error(`Error downloading album ${fileName} for user ${userId}:`, err.message);
           }
         }
       }
@@ -147,10 +157,10 @@ async function downloadExistingFiles() {
 
           if (!fs.existsSync(localCoverPath)) {
             try {
-              await downloadFileToTemp(`covers/${coverFileName}`);
-              console.log(`Downloaded cover: ${coverFileName}`);
+              await downloadFileToTemp(`covers/${coverFileName}`, userId);
+              console.log(`Downloaded cover: ${coverFileName} for user ${userId}`);
             } catch (err) {
-              console.error(`Error downloading cover ${coverFileName}:`, err.message);
+              console.error(`Error downloading cover ${coverFileName} for user ${userId}:`, err.message);
             }
           }
         }
@@ -530,19 +540,19 @@ app.delete('/api/delete-audio/:id', auth, async (req, res) => {
     // Delete from B2
     const fileName = path.basename(item.path);
     try {
-      await deleteFromB2(`audio_files/${fileName}`);
-      console.log(`Deleted audio file audio_files/${fileName} from B2`);
+      await deleteFromB2(`audio_files/${req.user.id}_${fileName}`);
+      console.log(`Deleted audio file audio_files/${req.user.id}_${fileName} from B2`);
     } catch (err) {
-      console.error(`Failed to delete audio file audio_files/${fileName} from B2:`, err.message);
+      console.error(`Failed to delete audio file audio_files/${req.user.id}_${fileName} from B2:`, err.message);
     }
 
     if (item.cover) {
       const coverFileName = path.basename(item.cover);
       try {
-        await deleteFromB2(`covers/${coverFileName}`);
-        console.log(`Deleted cover covers/${coverFileName} from B2`);
+        await deleteFromB2(`covers/${req.user.id}_${coverFileName}`);
+        console.log(`Deleted cover covers/${req.user.id}_${coverFileName} from B2`);
       } catch (err) {
-        console.error(`Failed to delete cover covers/${coverFileName} from B2:`, err.message);
+        console.error(`Failed to delete cover covers/${req.user.id}_${coverFileName} from B2:`, err.message);
       }
     }
 
